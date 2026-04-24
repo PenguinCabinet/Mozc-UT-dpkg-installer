@@ -6,7 +6,7 @@ Debian派生のディストリビューション環境で[mozc-ut](https://utuhi
 ## 使い方
 第一引数はIM Frameworkを指定してください。選択肢は、`ibus|fcitx|fcitx5|uim|emacs`です。今回の例では`ibus`を指定しています。apt-srcのダウンロード、辞書データの適用、dpkgによるインストールが最後まで行われます。
 ```
-curl -s  | bash -s -- ibus
+curl -s https://raw.githubusercontent.com/PenguinCabinet/Mozc-UT-dpkg-install.sh/refs/heads/main/install.sh | bash -s -- ibus
 ```
 
 `mozc-ut`にソースコードや辞書データ、dpkgなどが生成されます。`mozc-ut/dpkg`にIM Frameworkごとにディレクトリが分けられて保存されています。
