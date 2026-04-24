@@ -1,3 +1,5 @@
+#!/bin/bash
+
 mkdir mozc-ut
 cd mozc-ut
 
