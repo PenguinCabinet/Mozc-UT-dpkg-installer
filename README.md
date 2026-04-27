@@ -1,5 +1,5 @@
 # mozc-ut-dpkg-installer
-dpkg環境で[mozc-ut](https://utuhiro78.github.io/linuxplayers/mozc-ut.html)をワンライナーでインストールするためのシェルスクリプトです。
+dpkg環境で[Mozc UT Dictionaries](https://utuhiro78.github.io/linuxplayers/mozc-ut.html)をワンライナーでインストールするためのシェルスクリプトです。
 
 このリポジトリには、インストール手順が記されているだけで、Mozc UT Dictionariesの辞書データ等は一切含まれていません。
 
