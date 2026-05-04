@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 mkdir mozc-ut
 cd mozc-ut
@@ -20,13 +21,15 @@ else
 	exit
 fi
 
-dirs=(*/)
-mozc_dir=${dirs[0]%/}
+mozc_dir=$(ls -d */|grep mozc| sed 's:/$::')
 
 git clone --depth 1 https://github.com/utuhiro78/merge-ut-dictionaries.git
 cd merge-ut-dictionaries/src/merge/
-sh make.sh
-cat mozcdic-ut.txt >> ../../../$(mozc_dir)/src/data/dictionary_oss/dictionary00.txt
+bash make.sh
+cat mozcdic-ut.txt >> ../../../${mozc_dir}/src/data/dictionary_oss/dictionary00.txt
+
+echo "$mozc_dir"
+ls ../../../${mozc_dir}/src/data/dictionary_oss/
 
 cd ../../../
 apt-src build $1-mozc
@@ -44,8 +47,20 @@ mv *fcitx*.deb fcitx
 mv *emacs*.deb emacs
 mv *.deb common
 
-sudo apt install --reinstall ./common/*.deb -y
+for file in ./common/*; do
+  sudo apt-get install --reinstall $file -y
+done
 
-sudo apt install --reinstall ./$1/*.deb -y
+for file in ./$1/*; do
+  sudo apt-get install --reinstall $file -y
+done
+
+tree
+
+sudo apt-get install --reinstall ./common/*.deb -y
+sudo apt-get install --reinstall ./$1/*.deb -y
+
+sudo dpkg -i ./common/*.deb
+sudo dpkg -i ./$1/*.deb
 
 
