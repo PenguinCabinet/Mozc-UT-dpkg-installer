@@ -10,7 +10,5 @@ curl -s https://raw.githubusercontent.com/PenguinCabinet/Mozc-UT-dpkg-installer/
 ```
 
 `mozc-ut`にソースコードや辞書データ、dpkgなどが生成されます。`mozc-ut/dpkg`にdpkgが保存されています。
-```
-
 
 
