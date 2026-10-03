@@ -45,15 +45,7 @@ jobs:
         run: |
           set -eu
           TARGET="やはり俺の青春ラブコメはまちがっている"
-          SERVER_BIN=$(find /usr -name mozc_server -type f 2>/dev/null | head -n 1)
-          [ -n "$SERVER_BIN" ] || { echo "::error::mozc_server が見つかりません"; exit 2; }
-          echo "SERVER_BIN=$SERVER_BIN"
-          # クリーンな状態でサーバを起動し直す (学習履歴の影響を排除)
-          pkill mozc_server || true
-          rm -rf ~/.mozc
-          ( "$SERVER_BIN" >/tmp/mozc_server_raw.log 2>&1 & )
-          sleep 5
-          pgrep -a mozc_server || (cat /tmp/mozc_server_raw.log; exit 2)
+          bash tests/start_mozc_server.sh /tmp/mozc_server_raw.log
           set +e
           python3 tests/check_mozc_candidate.py --expected "$TARGET"
           code=$?
@@ -78,15 +70,18 @@ jobs:
         run: |
           set -eu
           TARGET="やはり俺の青春ラブコメはまちがっている"
-          SERVER_BIN=$(find /usr -name mozc_server -type f 2>/dev/null | head -n 1)
-          [ -n "$SERVER_BIN" ] || { echo "::error::mozc_server が見つかりません"; exit 2; }
-          echo "SERVER_BIN=$SERVER_BIN"
-          # install.sh が killall しているが、念のためクリーン起動し直す
-          pkill mozc_server || true
-          sleep 2
-          rm -rf ~/.mozc
-          ( "$SERVER_BIN" >/tmp/mozc_server_patched.log 2>&1 & )
-          sleep 5
-          pgrep -a mozc_server || (cat /tmp/mozc_server_patched.log; exit 2)
+          bash tests/start_mozc_server.sh /tmp/mozc_server_patched.log
           python3 tests/check_mozc_candidate.py --expected "$TARGET"
           echo "OK: 適用済みmozcの候補に '$TARGET' が含まれています"
+
+      - name: Dump debug info on failure
+        if: failure()
+        run: |
+          echo '--- server logs ---'
+          cat /tmp/mozc_server_*.log 2>/dev/null || true
+          echo '--- mozc packages ---'
+          dpkg -l 2>/dev/null | grep -i mozc || true
+          echo '--- data dir ---'
+          ls -l /usr/share/mozc 2>/dev/null || true
+          echo '--- processes ---'
+          pgrep -a mozc || true

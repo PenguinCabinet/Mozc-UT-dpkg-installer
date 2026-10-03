@@ -16,6 +16,10 @@
   1 = 見つからなかった (NOT FOUND)
   2 = テスト自体のエラー (helper不在、通信失敗など)
 
+--probe-only の終了コード:
+  0 = サーバ疎通OK (READY)
+  1 = サーバ疎通NG (NOT READY: helper不在・サーバ未起動・応答なしのいずれか)
+
 呼び出し側 (GitHub Actions) で期待値と組み合わせる想定:
   - 生mozc: exit 1 であること (exit 0 なら「テストの前提が間違っています」)
   - 適用済みmozc: exit 0 であること
@@ -147,6 +151,57 @@ class HelperSession:
                 pass
 
 
+def probe_once(helper_path):
+    """サーバ疎通確認を1回だけ行う。応答があれば True.
+
+    CreateSession はサーバと通信しないため、実際に SendKey を投げて
+    サーバが生きているか確認する。helper は SendKey 失敗時に自ら
+    終了してしまうため、呼び出し側は毎回新しい helper で試すこと。
+    この関数自体は一切 exit しない。
+    """
+    try:
+        proc = subprocess.Popen(
+            [helper_path],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            bufsize=1,
+        )
+    except OSError:
+        return False
+    try:
+        if not proc.stdout.readline():
+            return False
+        proc.stdin.write("(1 CreateSession)\n")
+        proc.stdin.flush()
+        m = SESSION_RE.search(proc.stdout.readline() or "")
+        if not m:
+            return False
+        # 無害なキー (IME ON) でサーバと実際に往復させる
+        proc.stdin.write(f"(2 SendKey {m.group(1)} on)\n")
+        proc.stdin.flush()
+        resp = proc.stdout.readline() or ""
+        return "(error" not in resp
+    except (BrokenPipeError, OSError, ValueError):
+        return False
+    finally:
+        try:
+            if proc.stdin:
+                proc.stdin.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except Exception:  # noqa: BLE001
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+
+
 def check_one_reading(helper, reading, expected, pages, debug_label):
     """1つの読みについて変換テストを行い、(found, outputs) を返す."""
     outputs = []
@@ -189,9 +244,21 @@ def main():
     ap.add_argument("--skip-full-reading", action="store_true", help="フルリーディングのテストを省略する")
     ap.add_argument("--expected", default=DEFAULT_EXPECTED, help="探す候補フレーズ")
     ap.add_argument("--pages", type=int, default=5, help="pagedown でめくるページ数 (既定: 5)")
+    ap.add_argument(
+        "--probe-only",
+        action="store_true",
+        help="サーバ疎通確認のみ行う (READY/NOT READY, exit 0/1)",
+    )
     args = ap.parse_args()
 
     helper_path = find_helper(args.helper)
+    if args.probe_only:
+        # リトライループから呼ばれる想定のため、出力は1行のみにする
+        if helper_path and probe_once(helper_path):
+            print("READY")
+            return 0
+        print("NOT READY")
+        return 1
     if not helper_path:
         print(
             "ERROR: mozc_emacs_helper が見つかりません。"
