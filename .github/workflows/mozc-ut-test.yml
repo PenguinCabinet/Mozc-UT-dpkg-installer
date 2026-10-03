@@ -20,8 +20,8 @@ jobs:
         run: |
           set -eux
           apt-get update
-          # install.sh が使う sudo / killall と、テストに使う pgrep / python3 を用意する
-          apt-get install -y sudo procps psmisc python3
+          # install.sh が使う sudo / killall と、テストに使う pgrep / python3 / strace を用意する
+          apt-get install -y sudo procps psmisc python3 strace
           # mozc_server は root 起動を拒否する (exit 255) ため、テスト用ユーザを用意する
           if ! id mozctest >/dev/null 2>&1; then
             if command -v useradd >/dev/null 2>&1; then

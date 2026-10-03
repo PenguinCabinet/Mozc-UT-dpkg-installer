@@ -36,19 +36,39 @@ dump_logs() {
     cat ~/.mozc/*.log 2>/dev/null || echo "(no profile logs)"
 }
 
-# まずフォアグラウンドで短時間動かし、即死するかを exit code で判定する。
-# timeout の exit code が 124 なら「8秒間生存した」= 正常起動とみなす。
-# それ以外 (139=SEGV, 134=ABORT, 0/1=サイレント終了など) は異常として
-# ログ・ldd・データ配置を出して失敗させる。
-echo "foreground probe (timeout 8s)..."
-set +e
-timeout -k 5 8 "$SERVER_BIN" >"$LOG" 2>&1
-FG_CODE=$?
-set -e
-echo "foreground probe: exit=$FG_CODE (124=8秒生存=正常)"
-if [ "$FG_CODE" -ne 124 ]; then
-    echo "ERROR: mozc_server が起動しません (exit=$FG_CODE)。サーバログ:" >&2
+# まずサーバを起動し、8秒間生き残るか見る。死んだ場合は wait で
+# exit code を回収する (timeout コマンドを介さない方式)。
+# 生き残ればそのまま本起動として使い、疎通確認に進む。
+rm -rf ~/.mozc
+"$SERVER_BIN" >"$LOG" 2>&1 &
+SERVER_PID=$!
+FG_CODE=""
+for _ in $(seq 1 8); do
+    sleep 1
+    STATE=$(ps -o stat= -p "$SERVER_PID" 2>/dev/null || echo gone)
+    case "$STATE" in
+        *Z*|*X*|gone|*"")
+            set +e
+            wait "$SERVER_PID"
+            FG_CODE=$?
+            set -e
+            break
+            ;;
+    esac
+done
+if [ -n "$FG_CODE" ]; then
+    echo "ERROR: mozc_server が8秒以内に終了しました (exit=$FG_CODE)" >&2
     dump_logs >&2 || true
+    echo "--- strace capture ---" >&2
+    if command -v strace >/dev/null 2>&1; then
+        rm -rf ~/.mozc
+        strace -f -e trace=process,file,network,ipc,signal \
+            -o "$LOG.strace" timeout 8 "$SERVER_BIN" >/dev/null 2>&1 || true
+        echo "--- strace tail ---" >&2
+        tail -60 "$LOG.strace" >&2 || echo "(no strace output)" >&2
+    else
+        echo "(strace not installed)" >&2
+    fi
     echo "--- ldd $SERVER_BIN ---" >&2
     ldd "$SERVER_BIN" >&2 || true
     echo "--- mozc-data files ---" >&2
@@ -60,20 +80,9 @@ if [ "$FG_CODE" -ne 124 ]; then
     exit 2
 fi
 
-# 正常そうなのでバックグラウンドで本起動する
-rm -rf ~/.mozc
-"$SERVER_BIN" >"$LOG" 2>&1 &
-SERVER_PID=$!
-sleep 2
+# 8秒生存したので、このまま本起動として使い、疎通確認に進む。
 STATE=$(ps -o stat= -p "$SERVER_PID" 2>/dev/null || echo gone)
 echo "server pid=$SERVER_PID state=$STATE"
-case "$STATE" in
-    *Z*|*X*|gone|"")
-        echo "ERROR: mozc_server が起動直後に終了しました。サーバログ:" >&2
-        dump_logs >&2 || true
-        exit 2
-        ;;
-esac
 
 # サーバの初期化 (辞書ロード等) を待つ。最大約90秒。
 for _ in $(seq 1 18); do
