@@ -1,0 +1,92 @@
+name: mozc-ut-test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  conversion-test:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:stable
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare container + enable deb-src (required for apt-src / build-dep)
+        run: |
+          set -eux
+          apt-get update
+          # install.sh が使う sudo / killall と、テストに使う pgrep / python3 を用意する
+          apt-get install -y sudo procps psmisc python3
+          if ls /etc/apt/sources.list.d/*.sources >/dev/null 2>&1; then
+            # DEB822 format (Debian bookworm/trixie, Ubuntu 24.04+)
+            sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/*.sources
+            grep -H "^Types:" /etc/apt/sources.list.d/*.sources || true
+          fi
+          if [ -f /etc/apt/sources.list ]; then
+            sudo sed -i '/^# deb-src/s/^# //' /etc/apt/sources.list || true
+          fi
+          sudo apt update
+
+      - name: Install raw Mozc + emacs helper (for conversion test)
+        run: |
+          set -eux
+          sudo apt install -y ibus-mozc mozc-server mozc-data emacs-mozc-bin || \
+            sudo apt install -y ibus-mozc mozc-server mozc-data emacs-mozc
+          which mozc_emacs_helper || true
+          find /usr -name 'mozc_*helper*' 2>/dev/null || true
+          find /usr -name mozc_server -type f 2>/dev/null || true
+
+      - name: Test raw Mozc (must NOT contain the UT phrase)
+        run: |
+          set -eu
+          TARGET="やはり俺の青春ラブコメはまちがっている"
+          SERVER_BIN=$(find /usr -name mozc_server -type f 2>/dev/null | head -n 1)
+          [ -n "$SERVER_BIN" ] || { echo "::error::mozc_server が見つかりません"; exit 2; }
+          echo "SERVER_BIN=$SERVER_BIN"
+          # クリーンな状態でサーバを起動し直す (学習履歴の影響を排除)
+          pkill mozc_server || true
+          rm -rf ~/.mozc
+          ( "$SERVER_BIN" >/tmp/mozc_server_raw.log 2>&1 & )
+          sleep 5
+          pgrep -a mozc_server || (cat /tmp/mozc_server_raw.log; exit 2)
+          set +e
+          python3 tests/check_mozc_candidate.py --expected "$TARGET"
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "::error::テストの前提が間違っています: 生のmozcの候補に '$TARGET' が含まれています"
+            exit 1
+          elif [ "$code" -eq 1 ]; then
+            echo "OK: 生のmozcの候補に '$TARGET' は含まれていません"
+          else
+            echo "::error::変換テスト自体が失敗しました (exit=$code)"
+            exit "$code"
+          fi
+
+      - name: Run install.sh (ibus)
+        run: |
+          set -eux
+          bash install.sh ibus
+          ls -l mozc-ut/dpkg/ || true
+
+      - name: Test patched Mozc (must contain the UT phrase)
+        run: |
+          set -eu
+          TARGET="やはり俺の青春ラブコメはまちがっている"
+          SERVER_BIN=$(find /usr -name mozc_server -type f 2>/dev/null | head -n 1)
+          [ -n "$SERVER_BIN" ] || { echo "::error::mozc_server が見つかりません"; exit 2; }
+          echo "SERVER_BIN=$SERVER_BIN"
+          # install.sh が killall しているが、念のためクリーン起動し直す
+          pkill mozc_server || true
+          sleep 2
+          rm -rf ~/.mozc
+          ( "$SERVER_BIN" >/tmp/mozc_server_patched.log 2>&1 & )
+          sleep 5
+          pgrep -a mozc_server || (cat /tmp/mozc_server_patched.log; exit 2)
+          python3 tests/check_mozc_candidate.py --expected "$TARGET"
+          echo "OK: 適用済みmozcの候補に '$TARGET' が含まれています"
