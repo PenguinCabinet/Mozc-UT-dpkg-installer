@@ -48,7 +48,7 @@ dump_logs() {
 # まずサーバを起動し、8秒間生き残るか見る。死んだ場合は wait で
 # exit code を回収する (timeout コマンドを介さない方式)。
 # 生き残ればそのまま本起動として使い、疎通確認に進む。
-rm -rf ~/.mozc
+# (プロファイル掃除は上の clean_profile で済ませているため、ここでは起動のみ)
 "$SERVER_BIN" >"$LOG" 2>&1 &
 SERVER_PID=$!
 FG_CODE=""
@@ -56,7 +56,7 @@ for _ in $(seq 1 8); do
     sleep 1
     STATE=$(ps -o stat= -p "$SERVER_PID" 2>/dev/null || echo gone)
     case "$STATE" in
-        *Z*|*X*|gone|*"")
+        *Z*|*X*|gone|"")
             set +e
             wait "$SERVER_PID"
             FG_CODE=$?
