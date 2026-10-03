@@ -1,7 +1,7 @@
 #!/bin/bash
 # mozc_server をクリーン起動し、疎通確認ができるまで待つ。
 # 使い方: bash tests/start_mozc_server.sh /tmp/mozc_server.log
-# 正常に READY になれば exit 0、異常があればサーバログを表示して exit 2。
+# 正常に READY になれば exit 0、異常があれば診断情報を表示して exit 2。
 #
 # ※呼び出し元リポジトリ直下 (tests/ の親) で実行される想定。
 set -euo pipefail
@@ -21,11 +21,33 @@ pkill mozc_server || true
 sleep 1
 rm -rf ~/.mozc
 
+# まずフォアグラウンドで短時間動かし、即死するかを exit code で判定する。
+# timeout の exit code が 124 なら「8秒間生存した」= 正常起動とみなす。
+# それ以外 (139=SEGV, 134=ABORT, 0/1=サイレント終了など) は異常として
+# ログ・ldd・データ配置を出して失敗させる。
+echo "foreground probe (timeout 8s)..."
+set +e
+timeout -k 5 8 "$SERVER_BIN" >"$LOG" 2>&1
+FG_CODE=$?
+set -e
+echo "foreground probe: exit=$FG_CODE (124=8秒生存=正常)"
+if [ "$FG_CODE" -ne 124 ]; then
+    echo "ERROR: mozc_server が起動しません (exit=$FG_CODE)。サーバログ:" >&2
+    cat "$LOG" >&2 || true
+    echo "--- ldd $SERVER_BIN ---" >&2
+    ldd "$SERVER_BIN" >&2 || true
+    echo "--- mozc-data files ---" >&2
+    dpkg -L mozc-data 2>/dev/null | head -50 >&2 || true
+    echo "--- processes ---" >&2
+    pgrep -a mozc >&2 || true
+    exit 2
+fi
+
+# 正常そうなのでバックグラウンドで本起動する
+rm -rf ~/.mozc
 "$SERVER_BIN" >"$LOG" 2>&1 &
 SERVER_PID=$!
-
-# 起動直後の死亡 (defunct を含む) を検出する
-sleep 3
+sleep 2
 STATE=$(ps -o stat= -p "$SERVER_PID" 2>/dev/null || echo gone)
 echo "server pid=$SERVER_PID state=$STATE"
 case "$STATE" in

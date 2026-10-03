@@ -83,5 +83,7 @@ jobs:
           dpkg -l 2>/dev/null | grep -i mozc || true
           echo '--- data dir ---'
           ls -l /usr/share/mozc 2>/dev/null || true
+          echo '--- mozc-data files ---'
+          dpkg -L mozc-data 2>/dev/null | head -50 || true
           echo '--- processes ---'
           pgrep -a mozc || true
