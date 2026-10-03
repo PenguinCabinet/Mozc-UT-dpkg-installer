@@ -2,7 +2,16 @@ name: mozc-ut-test
 
 on:
   push:
+    paths:
+      - "install.sh"
+      - "tests/**"
+      - ".github/workflows/mozc-ut-test.yml"
   pull_request:
+    paths:
+      - "install.sh"
+      - "tests/**"
+      - ".github/workflows/mozc-ut-test.yml"
+  # 手動実行はいつでも可能 (paths フィルタの対象外)
   workflow_dispatch:
 
 jobs:
