@@ -9,7 +9,7 @@ mkdir -p mozc-ut
 cd mozc-ut
 
 sudo apt update
-sudo apt install git wget apt-src devscripts build-essential -y 
+sudo apt install git wget apt-src devscripts build-essential python-is-python3 -y 
 
 # Check input and install source
 if [[ "$1" =~ ^(ibus|fcitx|fcitx5|emacs|uim)$ ]]; then
