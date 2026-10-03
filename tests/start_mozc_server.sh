@@ -15,11 +15,25 @@ if [ -z "$SERVER_BIN" ]; then
     exit 2
 fi
 echo "SERVER_BIN=$SERVER_BIN"
+echo "USER=$(id -un) UID=$(id -u) HOME=$HOME"
 
 # 古いサーバと学習履歴を掃除する
 pkill mozc_server || true
 sleep 1
+echo "--- lock/profile dir before cleanup ---"
+ls -la ~/.mozc 2>/dev/null || echo "(no ~/.mozc)"
+ls /tmp/.mozc* 2>/dev/null || true
 rm -rf ~/.mozc
+
+# smoke test: フラグ解釈まで到達できるか確認する。
+# ここで死ぬ場合は Run() 以前 (runlevel 拒否など) の問題。
+echo "--- mozc_server --help (smoke test) ---"
+set +e
+"$SERVER_BIN" --help >"$LOG.help" 2>&1
+HELP_CODE=$?
+set -e
+echo "help exit=$HELP_CODE"
+head -15 "$LOG.help" || true
 
 # まずフォアグラウンドで短時間動かし、即死するかを exit code で判定する。
 # timeout の exit code が 124 なら「8秒間生存した」= 正常起動とみなす。
@@ -38,6 +52,8 @@ if [ "$FG_CODE" -ne 124 ]; then
     ldd "$SERVER_BIN" >&2 || true
     echo "--- mozc-data files ---" >&2
     dpkg -L mozc-data 2>/dev/null | head -50 >&2 || true
+    echo "--- mozc-server files ---" >&2
+    dpkg -L mozc-server 2>/dev/null | head -30 >&2 || true
     echo "--- processes ---" >&2
     pgrep -a mozc >&2 || true
     exit 2

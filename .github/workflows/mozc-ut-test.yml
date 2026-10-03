@@ -22,6 +22,14 @@ jobs:
           apt-get update
           # install.sh が使う sudo / killall と、テストに使う pgrep / python3 を用意する
           apt-get install -y sudo procps psmisc python3
+          # mozc_server は root 起動を拒否する (exit 255) ため、テスト用ユーザを用意する
+          if ! id mozctest >/dev/null 2>&1; then
+            if command -v useradd >/dev/null 2>&1; then
+              useradd -m mozctest
+            else
+              adduser --disabled-password --gecos '' mozctest
+            fi
+          fi
           if ls /etc/apt/sources.list.d/*.sources >/dev/null 2>&1; then
             # DEB822 format (Debian bookworm/trixie, Ubuntu 24.04+)
             sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/*.sources
@@ -45,9 +53,13 @@ jobs:
         run: |
           set -eu
           TARGET="やはり俺の青春ラブコメはまちがっている"
-          bash tests/start_mozc_server.sh /tmp/mozc_server_raw.log
+          # mozc_server は root 起動を拒否するため、サーバもクライアントも
+          # テスト用ユーザ (mozctest) で動かす。IPC の鍵ファイルは HOME 配下で
+          # 共有されるため、両者のユーザ・HOME を一致させる必要がある。
+          rm -f /tmp/mozc_server_raw.log
+          sudo -H -u mozctest bash tests/start_mozc_server.sh /tmp/mozc_server_raw.log
           set +e
-          python3 tests/check_mozc_candidate.py --expected "$TARGET"
+          sudo -H -u mozctest python3 tests/check_mozc_candidate.py --expected "$TARGET"
           code=$?
           set -e
           if [ "$code" -eq 0 ]; then
@@ -70,8 +82,9 @@ jobs:
         run: |
           set -eu
           TARGET="やはり俺の青春ラブコメはまちがっている"
-          bash tests/start_mozc_server.sh /tmp/mozc_server_patched.log
-          python3 tests/check_mozc_candidate.py --expected "$TARGET"
+          rm -f /tmp/mozc_server_patched.log
+          sudo -H -u mozctest bash tests/start_mozc_server.sh /tmp/mozc_server_patched.log
+          sudo -H -u mozctest python3 tests/check_mozc_candidate.py --expected "$TARGET"
           echo "OK: 適用済みmozcの候補に '$TARGET' が含まれています"
 
       - name: Dump debug info on failure
@@ -85,5 +98,10 @@ jobs:
           ls -l /usr/share/mozc 2>/dev/null || true
           echo '--- mozc-data files ---'
           dpkg -L mozc-data 2>/dev/null | head -50 || true
+          echo '--- mozc-server files ---'
+          dpkg -L mozc-server 2>/dev/null | head -30 || true
+          echo '--- profile dirs ---'
+          ls -la /home/mozctest/.mozc 2>/dev/null || true
+          ls -la ~/.mozc 2>/dev/null || true
           echo '--- processes ---'
           pgrep -a mozc || true
