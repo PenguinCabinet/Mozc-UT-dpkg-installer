@@ -92,6 +92,8 @@ jobs:
         run: |
           echo '--- server logs ---'
           cat /tmp/mozc_server_*.log 2>/dev/null || true
+          echo '--- profile logs ---'
+          cat /home/mozctest/.mozc/*.log 2>/dev/null || echo '(no profile logs)'
           echo '--- mozc packages ---'
           dpkg -l 2>/dev/null | grep -i mozc || true
           echo '--- data dir ---'

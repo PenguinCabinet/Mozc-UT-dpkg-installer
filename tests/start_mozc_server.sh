@@ -25,15 +25,16 @@ ls -la ~/.mozc 2>/dev/null || echo "(no ~/.mozc)"
 ls /tmp/.mozc* 2>/dev/null || true
 rm -rf ~/.mozc
 
-# smoke test: フラグ解釈まで到達できるか確認する。
-# ここで死ぬ場合は Run() 以前 (runlevel 拒否など) の問題。
-echo "--- mozc_server --help (smoke test) ---"
-set +e
-"$SERVER_BIN" --help >"$LOG.help" 2>&1
-HELP_CODE=$?
-set -e
-echo "help exit=$HELP_CODE"
-head -15 "$LOG.help" || true
+# 診断用: リダイレクト先ログと、Mozc が file sink に書く
+# プロファイル側ログ (~/.mozc/*.log) の両方を出す。
+dump_logs() {
+    echo "--- redirect log ($LOG) ---"
+    cat "$LOG" 2>/dev/null || true
+    echo "--- profile dir ---"
+    ls -la ~/.mozc 2>/dev/null || echo "(no ~/.mozc)"
+    echo "--- profile logs (~/.mozc/*.log) ---"
+    cat ~/.mozc/*.log 2>/dev/null || echo "(no profile logs)"
+}
 
 # まずフォアグラウンドで短時間動かし、即死するかを exit code で判定する。
 # timeout の exit code が 124 なら「8秒間生存した」= 正常起動とみなす。
@@ -47,7 +48,7 @@ set -e
 echo "foreground probe: exit=$FG_CODE (124=8秒生存=正常)"
 if [ "$FG_CODE" -ne 124 ]; then
     echo "ERROR: mozc_server が起動しません (exit=$FG_CODE)。サーバログ:" >&2
-    cat "$LOG" >&2 || true
+    dump_logs >&2 || true
     echo "--- ldd $SERVER_BIN ---" >&2
     ldd "$SERVER_BIN" >&2 || true
     echo "--- mozc-data files ---" >&2
@@ -69,7 +70,7 @@ echo "server pid=$SERVER_PID state=$STATE"
 case "$STATE" in
     *Z*|*X*|gone|"")
         echo "ERROR: mozc_server が起動直後に終了しました。サーバログ:" >&2
-        cat "$LOG" >&2 || true
+        dump_logs >&2 || true
         exit 2
         ;;
 esac
@@ -84,6 +85,6 @@ for _ in $(seq 1 18); do
 done
 
 echo "ERROR: mozc_server の準備ができませんでした。サーバログ:" >&2
-cat "$LOG" >&2 || true
+dump_logs >&2 || true
 pgrep -a mozc || true
 exit 2
