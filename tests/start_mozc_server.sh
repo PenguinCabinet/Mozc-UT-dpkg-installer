@@ -22,18 +22,27 @@ pkill mozc_server || true
 sleep 1
 echo "--- lock/profile dir before cleanup ---"
 ls -la ~/.mozc 2>/dev/null || echo "(no ~/.mozc)"
+ls -la ~/.config/mozc 2>/dev/null || echo "(no ~/.config/mozc)"
 ls /tmp/.mozc* 2>/dev/null || true
-rm -rf ~/.mozc
+# mozc 2.29 系はプロファイルに ~/.config/mozc を使うが、親ディレクトリが
+# 無いと素朴な mkdir が失敗してサーバが exit 255 で死ぬ。あらかじめ作る。
+# (旧 ~/.mozc が残っているとそちらが優先されるため、両方掃除して固定する)
+clean_profile() {
+    mkdir -p ~/.config
+    rm -rf ~/.config/mozc ~/.mozc
+}
+clean_profile
 
 # 診断用: リダイレクト先ログと、Mozc が file sink に書く
-# プロファイル側ログ (~/.mozc/*.log) の両方を出す。
+# プロファイル側ログ (~/.config/mozc/*.log) の両方を出す。
 dump_logs() {
     echo "--- redirect log ($LOG) ---"
     cat "$LOG" 2>/dev/null || true
     echo "--- profile dir ---"
     ls -la ~/.mozc 2>/dev/null || echo "(no ~/.mozc)"
-    echo "--- profile logs (~/.mozc/*.log) ---"
-    cat ~/.mozc/*.log 2>/dev/null || echo "(no profile logs)"
+    ls -la ~/.config/mozc 2>/dev/null || echo "(no ~/.config/mozc)"
+    echo "--- profile logs ---"
+    cat ~/.mozc/*.log ~/.config/mozc/*.log 2>/dev/null || echo "(no profile logs)"
 }
 
 # まずサーバを起動し、8秒間生き残るか見る。死んだ場合は wait で
@@ -61,7 +70,7 @@ if [ -n "$FG_CODE" ]; then
     dump_logs >&2 || true
     echo "--- strace capture ---" >&2
     if command -v strace >/dev/null 2>&1; then
-        rm -rf ~/.mozc
+        clean_profile
         strace -f -e trace=process,file,network,ipc,signal \
             -o "$LOG.strace" timeout 8 "$SERVER_BIN" >/dev/null 2>&1 || true
         echo "--- strace tail ---" >&2
